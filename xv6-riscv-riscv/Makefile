@@ -166,8 +166,11 @@ CPUS := 3
 endif
 
 # QEMU是一个基于GPL开源协议的纯软件实现的虚拟化模拟器，能够模拟一台能够独立运行操作系统的虚拟机
-# 在Linux平台，QEMU 可以配合 KVM 来完成虚拟化工作，从而提升性能，因为 KVM 是硬件辅助的虚拟化技术，主要负责比较繁琐的 CPU 和内存虚拟化，而 QEMU 则负责 I/O 虚拟化
+# 原生QEMU是通过软件模拟的硬件，性能较差
+# KVM，基于内核的虚拟机，是内置于 Linux 内核的 hypervisor。
+# 在Linux平台，QEMU 可以配合 KVM 来完成虚拟化工作，从而提升性能，因为 KVM 是硬件辅助的虚拟化技术，主要负责比较繁琐的 CPU 和内存虚拟化，而 QEMU 则负责 I/O 虚拟化，见图hypervisor/kvm-riscv-hypervisor.png
 # Virtio是虚拟化设备的一个规范，它定义了一系列的设备和I/O端口，并支持MMIO、PCI等多种总线，QEMU实现了这个规范
+# Virtio分Frontend和Backend，这里Frontend在Guest OS里，就是driver程序，Backend在QEMU里，就是虚拟的device
 
 # 这里bios=none意味着无需引导，直接加载内核映像，从entry开始执行
 # 正常文件系统第一个扇区（0号扇区）应该是boot程序，但这里在mkfs时，第一个扇区没有放任何内容，因为QEMU帮我们boot了
