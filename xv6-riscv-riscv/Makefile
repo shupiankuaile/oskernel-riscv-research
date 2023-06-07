@@ -78,6 +78,9 @@ $K/kernel: $(OBJS) $K/kernel.ld $U/initcode
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
 
+# initcode的作用是调用系统调用exec，从而执行user/init进程
+# 它其实已经被提前放在proc.c的initcode全局变量里了
+# 内核是如何拉起第一个用户进程init的，请看proc.c的userinit函数
 $U/initcode: $U/initcode.S
 	$(CC) $(CFLAGS) -march=rv64g -nostdinc -I. -Ikernel -c $U/initcode.S -o $U/initcode.o
 	$(LD) $(LDFLAGS) -N -e start -Ttext 0 -o $U/initcode.out $U/initcode.o
@@ -87,8 +90,14 @@ $U/initcode: $U/initcode.S
 tags: $(OBJS) _init
 	etags *.S *.c
 
+# 在Linux中，glibc库就相当于这里的ULIB
+# glibc是GNU 的C语言标准库，但在Linux中，glibc还包括系统调用、POSIX标准、SystemV等一系列库的用户级的封装和实现
 ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
 
+# 所有的user目录下的程序，都会按照user.ld的布局链接成以_为前缀的可执行文件，比如：init.o会链接成_init
+# 然后当mkfs时，前缀_会被去掉，比如：_init在文件系统中叫init
+# user.ld指定了程序的entry为_main，这个函数定义在ulib.c中，它调用了main函数
+# 在Linux中，我们的程序入口都是main，但实际上进程的真正entry是_main，这些事情是链接器帮你做的
 _%: %.o $(ULIB)
 	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $^
 	$(OBJDUMP) -S $@ > $*.asm
@@ -156,9 +165,19 @@ ifndef CPUS
 CPUS := 3
 endif
 
+# QEMU是一个基于GPL开源协议的纯软件实现的虚拟化模拟器，能够模拟一台能够独立运行操作系统的虚拟机
+# 在Linux平台，QEMU 可以配合 KVM 来完成虚拟化工作，从而提升性能，因为 KVM 是硬件辅助的虚拟化技术，主要负责比较繁琐的 CPU 和内存虚拟化，而 QEMU 则负责 I/O 虚拟化
+# Virtio是虚拟化设备的一个规范，它定义了一系列的设备和I/O端口，并支持MMIO、PCI等多种总线，QEMU实现了这个规范
+
+# 这里bios=none意味着无需引导，直接加载内核映像，从entry开始执行
+# 正常文件系统第一个扇区（0号扇区）应该是boot程序，但这里在mkfs时，第一个扇区没有放任何内容，因为QEMU帮我们boot了
 QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic
+# Virtio规范1.0之前定义的一些接口叫legacy接口（遗留接口）
 QEMUOPTS += -global virtio-mmio.force-legacy=false
+# QEMU有两种重要的磁盘镜像格式：raw和qcow2。raw是裸盘，512K一个扇区。
+# fs.img是由mkfs命令创建的，相当于给裸盘安装了一个文件系统，这个文件系统的 一个block = 一个扇区
 QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
+# 这里总线使用了MMIO，drive=x0对应前面指定的drive id=x0，表示fs.img这个文件就是虚拟磁盘了
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
 qemu: $K/kernel fs.img
