@@ -67,6 +67,7 @@ kvminithart()
   w_satp(MAKE_SATP(kernel_pagetable));
 
   // flush stale entries from the TLB.
+  // TLB是CPU内部缓存...
   sfence_vma();
 }
 
